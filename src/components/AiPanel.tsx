@@ -3,6 +3,7 @@ import { useStore } from "../lib/store";
 import { aiChat, type AiMessage, type TextPart, type ImagePart } from "../lib/ai";
 import { renderMarkdown } from "../lib/markdown";
 import { api, type ChatSummary } from "../lib/api";
+import { MOD } from "../lib/platform";
 import { IconClock, IconPlus, IconSend, IconImage, IconCamera, IconGlobe, IconClose } from "./icons";
 
 interface Msg {
@@ -333,6 +334,15 @@ export default function AiPanel() {
 
   /** 选择图片文件 → 自动转笔记 */
   const pickImage = async () => {
+    let imgs: string[] = [];
+    if (typeof window !== "undefined" && (window as any).electronAPI) {
+      imgs = await (window as any).electronAPI.pickImages();
+      if (imgs.length) {
+        setImages((arr) => [...arr, ...imgs].slice(0, MAX_IMAGES));
+        await imageToNote(imgs); // 选图即转笔记
+      }
+      return;
+    }
     const { open } = await import("@tauri-apps/plugin-dialog");
     const files = await open({
       multiple: true,
@@ -340,7 +350,6 @@ export default function AiPanel() {
     });
     if (!Array.isArray(files) || !files.length) return;
     const { convertFileSrc } = await import("@tauri-apps/api/core");
-    const imgs: string[] = [];
     for (const f of files.slice(0, MAX_IMAGES)) {
       try {
         const blob = await fetch(convertFileSrc(f)).then((r) => r.blob());
@@ -488,7 +497,7 @@ export default function AiPanel() {
           rows={3}
           placeholder={
             isUrl
-              ? "已识别链接，点右侧按钮或 ⌘↩ 一键转笔记"
+              ? `已识别链接，点右侧按钮或 ${MOD}↩ 一键转笔记`
               : withCtx && currentRel
               ? "提问（携带当前笔记）… 可粘贴图片/链接"
               : "提问… 可粘贴图片/链接"
@@ -543,7 +552,7 @@ export default function AiPanel() {
               <IconImage size={14} /> 图片转笔记
             </button>
           ) : (
-            <button className="ai-send" disabled={busy || (!input.trim() && !hasImages)} onClick={primaryAction} title="发送 ⌘↩">
+            <button className="ai-send" disabled={busy || (!input.trim() && !hasImages)} onClick={primaryAction} title={`发送 ${MOD}↩`}>
               <IconSend size={15} />
             </button>
           )}

@@ -3,6 +3,7 @@ import { renderMarkdown, ensurePrism } from "../lib/markdown";
 import { useStore } from "../lib/store";
 import type { NoteMeta } from "../lib/cm";
 import { mmTextStyle } from "./MindmapView";
+import type { ScrollSyncLock, ScrollSyncRef } from "../lib/scroll-sync";
 
 /** mermaid 动态加载缓存（首次用到才 import，约 1MB，空闲不占内存） */
 let mermaidPromise: Promise<typeof import("mermaid")> | null = null;
@@ -19,13 +20,23 @@ function loadMarkmap() {
   return mmPromise;
 }
 
-export default function Preview({ notes, dark }: { notes: () => NoteMeta[]; dark: boolean }) {
+interface PreviewProps {
+  notes: () => NoteMeta[];
+  dark: boolean;
+  syncRef?: ScrollSyncRef;
+  syncLock?: ScrollSyncLock;
+  onScrollLine?: (line: number) => void;
+}
+
+export default function Preview({ notes, dark, syncRef, syncLock, onScrollLine }: PreviewProps) {
   const content = useStore((s) => s.content);
   const config = useStore((s) => s.config);
   const treeVersion = useStore((s) => s.treeVersion);
   const largeFile = useStore((s) => s.largeFile);
+  const currentRel = useStore((s) => s.currentRel);
   const openFile = useStore((s) => s.openFile);
   const hostRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const vault = config?.vaultPath ?? "";
 
@@ -133,6 +144,68 @@ export default function Preview({ notes, dark }: { notes: () => NoteMeta[]; dark
     void ensurePrism();
   }, []);
 
+  // 切换文件时预览滚回顶部（与编辑器对齐）
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (scroller) scroller.scrollTop = 0;
+  }, [currentRel]);
+
+  // 分栏滚动同步：预览滚动 → 上报顶部可见标题所在行
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    const root = hostRef.current;
+    if (!scroller || !root) return;
+    let raf = 0;
+    let lastLine = 0;
+    const report = () => {
+      raf = 0;
+      if (syncLock?.current) return;
+      const heads = root.querySelectorAll<HTMLElement>("[data-line]");
+      let top: HTMLElement | null = null;
+      const topY = scroller.scrollTop + 12;
+      for (const h of Array.from(heads)) {
+        if (h.offsetTop <= topY) top = h;
+        else break;
+      }
+      if (top) {
+        const line = Number(top.dataset.line) + 1;
+        if (line !== lastLine) {
+          lastLine = line;
+          onScrollLine?.(line);
+        }
+      }
+    };
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(report);
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    if (syncRef) {
+      syncRef.current = {
+        scrollToLine: (line: number) => {
+          if (syncLock?.current) return;
+          if (syncLock) syncLock.current = true;
+          const target = line - 1;
+          const heads = root.querySelectorAll<HTMLElement>("[data-line]");
+          let el: HTMLElement | null = null;
+          for (const h of Array.from(heads)) {
+            if (Number(h.dataset.line) <= target) el = h;
+            else break;
+          }
+          if (el) scroller.scrollTop = el.offsetTop - 8;
+          window.setTimeout(() => {
+            if (syncLock) syncLock.current = false;
+          }, 40);
+        },
+      };
+    }
+    return () => {
+      cancelAnimationFrame(raf);
+      scroller.removeEventListener("scroll", onScroll);
+      if (syncRef) syncRef.current = null;
+    };
+  }, [html, syncRef, syncLock, onScrollLine]);
+
   if (largeFile) {
     return (
       <div className="preview-pane" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-faint)", flexDirection: "column", gap: 8 }}>
@@ -144,7 +217,7 @@ export default function Preview({ notes, dark }: { notes: () => NoteMeta[]; dark
   }
 
   return (
-    <div className="preview-pane" style={{ overflowY: "auto", padding: "24px 32px" }}>
+    <div ref={scrollRef} className="preview-pane" style={{ overflowY: "auto", height: "100%", padding: "24px 32px" }}>
       <div
         ref={hostRef}
         className="md-preview"

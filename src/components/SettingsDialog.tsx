@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { useStore } from "../lib/store";
 import type { Config } from "../lib/types";
 
@@ -13,13 +12,19 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [model, setModel] = useState(config?.aiModel ?? "deepseek-v4-flash");
   const [visionModel, setVisionModel] = useState(config?.aiVisionModel ?? "deepseek-v4-flash-vision-exp");
   const [apiKey, setApiKey] = useState(config?.aiApiKey ?? "");
-  const [theme, setTheme] = useState<string>(config?.theme ?? "auto");
+  const [theme, setTheme] = useState<Config["theme"]>(config?.theme ?? "auto");
   const [saving, setSaving] = useState(false);
   const [changedVault, setChangedVault] = useState(false);
 
   const pickDir = async () => {
     try {
-      const dir = await open({ directory: true, title: "选择知识库目录" });
+      let dir: string | null = null;
+      if (typeof window !== "undefined" && (window as any).electronAPI) {
+        dir = await (window as any).electronAPI.pickDirectory();
+      } else {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        dir = await open({ directory: true, title: "选择知识库目录" });
+      }
       if (typeof dir === "string") {
         setVaultPath(dir);
         setChangedVault(dir !== config?.vaultPath);
@@ -63,8 +68,8 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           <div>
             <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>知识库目录（笔记、附件统一存放）</div>
             <div style={{ display: "flex", gap: 8 }}>
-              <input className="input" value={vaultPath} onChange={(e) => { setVaultPath(e.target.value); setChangedVault(true); }} placeholder="~/Documents/dsh-notes" style={{ userSelect: "text" }} />
-              <button className="btn" onClick={() => void pickDir()}>选择…</button>
+              <input className="input" value={vaultPath} onChange={(e) => { setVaultPath(e.target.value); setChangedVault(true); }} placeholder="~/Documents/dsh-notes" style={{ flex: 1, minWidth: 0, userSelect: "text" }} />
+              <button className="btn" onClick={() => void pickDir()} style={{ whiteSpace: "nowrap", flexShrink: 0 }}>选择</button>
             </div>
           </div>
 
@@ -93,7 +98,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
 
           <div>
             <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>外观</div>
-            <select className="input" value={theme} onChange={(e) => setTheme(e.target.value)}>
+            <select className="input" value={theme} onChange={(e) => setTheme(e.target.value as Config["theme"])}>
               <option value="auto">跟随系统</option>
               <option value="light">浅色</option>
               <option value="dark">深色</option>

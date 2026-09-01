@@ -13,6 +13,8 @@ interface AppState {
   vaultReady: boolean;
 
   currentRel: string | null;
+  /** 当前打开的外部文件（系统双击唤起，vault 之外，绝对路径；可编辑并写回原路径） */
+  externalPath: string | null;
   content: string;
   savedContent: string;
   fileSize: number;
@@ -27,6 +29,8 @@ interface AppState {
   rightVisible: boolean;
   /** 右侧栏宽度（可拖拽调整，240–560） */
   rightWidth: number;
+  /** 侧栏宽度（可拖拽调整，180–420） */
+  sidebarWidth: number;
   /** 文件树刷新信号（递增触发重载） */
   treeVersion: number;
   linkIndex: LinkEntry[];
@@ -38,6 +42,8 @@ interface AppState {
   init: () => Promise<void>;
   selectVault: (path: string) => Promise<void>;
   openFile: (rel: string) => Promise<void>;
+  openExternal: (absPath: string) => Promise<void>;
+  closeFile: () => Promise<void>;
   updateContent: (text: string) => void;
   saveNow: () => Promise<void>;
   reloadCurrent: () => Promise<void>;
@@ -55,6 +61,7 @@ export const useStore = create<AppState>((set, get) => ({
   vaultReady: false,
 
   currentRel: null,
+  externalPath: null,
   content: "",
   savedContent: "",
   fileSize: 0,
@@ -67,6 +74,7 @@ export const useStore = create<AppState>((set, get) => ({
   sidebarVisible: true,
   rightVisible: true,
   rightWidth: Number(localStorage.getItem("dsh.rightWidth")) || 300,
+  sidebarWidth: Number(localStorage.getItem("dsh.sidebarWidth")) || 250,
   treeVersion: 0,
   linkIndex: [],
   linkVersion: 0,
@@ -87,17 +95,18 @@ export const useStore = create<AppState>((set, get) => ({
   selectVault: async (path) => {
     await api.ensureVault(path);
     const cfg = await api.setConfig({ vaultPath: path });
-    set({ config: cfg, vaultReady: true, treeVersion: get().treeVersion + 1 });
+    set({ config: cfg, vaultReady: true, treeVersion: get().treeVersion + 1, externalPath: null });
     await api.startWatch().catch(() => {});
     get().refreshLinks();
   },
 
   openFile: async (rel) => {
-    // 切换前先落盘未保存内容
-    if (get().dirty && get().currentRel) await get().saveNow();
+    // 切换前先落盘未保存内容（含外部文件）
+    if (get().dirty && (get().currentRel || get().externalPath)) await get().saveNow();
     const r = await api.readFile(rel);
     set({
       currentRel: rel,
+      externalPath: null,
       content: r.content,
       savedContent: r.content,
       fileSize: r.size,
@@ -106,6 +115,37 @@ export const useStore = create<AppState>((set, get) => ({
       modifiedOutside: false,
       // 大文件自动切纯编辑
       viewMode: r.size > LARGE_FILE_BYTES ? "edit" : get().viewMode === "edit" ? "edit" : get().viewMode,
+    });
+  },
+
+  openExternal: async (absPath) => {
+    if (get().dirty && (get().currentRel || get().externalPath)) await get().saveNow();
+    const r = await api.readExternalFile(absPath);
+    set({
+      currentRel: null,
+      externalPath: absPath,
+      content: r.content,
+      savedContent: r.content,
+      fileSize: r.size,
+      dirty: false,
+      largeFile: r.size > LARGE_FILE_BYTES,
+      modifiedOutside: false,
+      viewMode: r.size > LARGE_FILE_BYTES ? "edit" : get().viewMode === "edit" ? "edit" : get().viewMode,
+    });
+  },
+
+  closeFile: async () => {
+    // 关闭前若有未保存内容先落盘（外部文件写回原路径，vault 文件写回相对路径）
+    if (get().dirty && (get().currentRel || get().externalPath)) await get().saveNow().catch(() => {});
+    set({
+      currentRel: null,
+      externalPath: null,
+      content: "",
+      savedContent: "",
+      fileSize: 0,
+      dirty: false,
+      largeFile: false,
+      modifiedOutside: false,
     });
   },
 
@@ -119,8 +159,15 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   saveNow: async () => {
-    const { currentRel, content, dirty } = get();
-    if (!currentRel || !dirty) return;
+    const { currentRel, externalPath, content, dirty } = get();
+    if (!dirty) return;
+    if (externalPath) {
+      // 外部文件写回原绝对路径（主进程原子写入）
+      await api.writeExternalFile(externalPath, content);
+      set({ savedContent: content, dirty: false, fileSize: new Blob([content]).size });
+      return;
+    }
+    if (!currentRel) return;
     await api.writeFile(currentRel, content);
     set({
       savedContent: content,
@@ -131,6 +178,19 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   reloadCurrent: async () => {
+    const ext = get().externalPath;
+    if (ext) {
+      const r = await api.readExternalFile(ext);
+      set({
+        content: r.content,
+        savedContent: r.content,
+        fileSize: r.size,
+        dirty: false,
+        largeFile: r.size > LARGE_FILE_BYTES,
+        modifiedOutside: false,
+      });
+      return;
+    }
     const rel = get().currentRel;
     if (!rel) return;
     const r = await api.readFile(rel);

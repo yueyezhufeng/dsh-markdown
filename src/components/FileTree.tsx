@@ -97,15 +97,16 @@ export default function FileTree({ quickFilter }: { quickFilter: string }) {
       const isOpen = expanded.has(node.relPath);
       const isMd = /\.md$/i.test(node.name);
       const isActive = currentRel === node.relPath;
+      const ed = editing !== null && editing.rel === node.relPath && !editing.isNew ? editing : null;
       return (
         <div key={node.relPath}>
-          {editing?.rel === node.relPath && !editing.isNew ? (
+          {ed ? (
             <div style={{ paddingLeft: depth * 14 + 24 }}>
               <input
                 className="input"
                 autoFocus
-                value={editing.value}
-                onChange={(e) => setEditing({ ...editing, value: e.target.value })}
+                value={ed.value}
+                onChange={(e) => setEditing({ ...ed, value: e.target.value })}
                 onBlur={commitEdit}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") void commitEdit();

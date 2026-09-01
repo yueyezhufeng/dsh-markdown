@@ -255,7 +255,18 @@ input, textarea, select { font: inherit; color: inherit; }
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
 }
+.sidebar-resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  z-index: 10;
+}
+.sidebar-resizer:hover { background: color-mix(in srgb, var(--accent) 25%, transparent); }
 .sidebar-header {
   padding: 8px 10px;
   display: flex;
@@ -376,6 +387,26 @@ input, textarea, select { font: inherit; color: inherit; }
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 40%;
+}
+/* 打开的当前文件：整组靠右（margin-left:auto），文件名用满剩余空间，放不下才省略 */
+.toolbar .file-title {
+  margin-left: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.toolbar .file-title .title {
+  margin: 0;
+  max-width: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 分栏 */

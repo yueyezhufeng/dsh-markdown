@@ -4,6 +4,8 @@
 
 一个 macOS 上的 Markdown 知识库应用：双向链接、五种视图、思维导图、知识图谱、AI 助手、网页转笔记、截图转笔记。
 
+新增 electron 支持，构建Windows环境下应用。
+
 ![主界面](docs/manual/images/01-main.png)
 
 ## 功能速览

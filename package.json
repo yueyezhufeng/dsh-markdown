@@ -2,12 +2,16 @@
   "name": "dsh-markdown",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
+  "description": "DSH Markdown - 智能 Markdown 知识库",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "electron:dev": "node scripts/kill-port.mjs 1430 && vite --config vite.config.electron.ts",
+    "electron:build": "node scripts/clean-electron.mjs && node scripts/prep-wincodesign.mjs && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.electron.json && vite build --config vite.config.electron.ts && electron-builder",
+    "electron:pack": "node scripts/clean-electron.mjs && node scripts/prep-wincodesign.mjs && vite build --config vite.config.electron.ts && electron-builder --dir"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",
@@ -27,6 +31,7 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "chokidar": "^3.6.0",
     "codemirror": "^6.0.2",
     "markdown-it": "^14.1.0",
     "markmap-lib": "^0.18.11",
@@ -40,11 +45,59 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
     "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.10.0",
     "@types/prismjs": "^1.26.5",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vite-plugin-electron": "^0.28.7",
+    "vite-plugin-electron-renderer": "^0.14.5"
+  },
+  "build": {
+    "appId": "com.zhufeng.zf-markdown",
+    "productName": "MarkdownX",
+    "asar": true,
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "fileAssociations": [
+      { "ext": "md", "name": "Markdown 文档", "description": "Markdown 文档（MarkdownX）", "role": "Editor" },
+      { "ext": "markdown", "name": "Markdown 文档", "description": "Markdown 文档（MarkdownX）", "role": "Editor" }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.productivity",
+      "icon": "src-tauri/icons/icon.icns"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "src-tauri/icons/icon.ico"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Office",
+      "icon": "src-tauri/icons"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MarkdownX"
+    }
   }
 }
